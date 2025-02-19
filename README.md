@@ -1,3 +1,8 @@
+databricks.oauth.client-id=b2d94b7e-b35b-4567-8395-9ac2edad50de
+databricks.oauth.client-secret=fn78Qo~lUJ9FNYFPBgLcvfto_oX336-lWelCPcdd
+databricks.oauth.tenant-id=5d3e2773-e07f-4432-a630-1a0f68a28a05
+databricks.oauth.token-url=https://login.microsoftonline.com/${databricks.oauth.tenant-id}/oauth2/v2.0/token
+
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
