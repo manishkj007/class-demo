@@ -1,56 +1,49 @@
-databricks.oauth.client-id=b2d94b7e-b35b-4567-8395-9ac2edad50de
-databricks.oauth.client-secret=fn78Qo~lUJ9FNYFPBgLcvfto_oX336-lWelCPcdd
-databricks.oauth.tenant-id=5d3e2773-e07f-4432-a630-1a0f68a28a05
-databricks.oauth.token-url=https://login.microsoftonline.com/${databricks.oauth.tenant-id}/oauth2/v2.0/token
-
-import org.springframework.http.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Objects;
+import javax.sql.DataSource;
+import java.util.List;
+import java.util.Map;
 
 @Service
-public class DatabricksOAuthService {
+public class DatabricksService {
 
-    @Value("${databricks.oauth.client-id}")
-    private String clientId;
+    @Autowired
+    private DatabricksOAuthService oAuthService;
 
-    @Value("${databricks.oauth.client-secret}")
-    private String clientSecret;
+    public List<Map<String, Object>> getDatabricksData(String tableName) {
+        String accessToken = oAuthService.getAccessToken();
 
-    @Value("${databricks.oauth.token-url}")
-    private String tokenUrl;
+        DataSource dataSource = new DriverManagerDataSource(
+                "jdbc:databricks://adb-7326973620544214.azuredatabricks.net:443/default;" +
+                "transportMode=http;ssl=1;AuthMech=3;UID=token;PWD=" + accessToken
+        );
 
-    private final RestTemplate restTemplate = new RestTemplate();
-
-    public String getAccessToken() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("client_id", clientId);
-        body.add("client_secret", clientSecret);
-        body.add("scope", "https://databricks.azure.com/.default");
-        body.add("grant_type", "client_credentials");
-
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
-
-        ResponseEntity<String> response = restTemplate.exchange(tokenUrl, HttpMethod.POST, request, String.class);
-
-        if (response.getStatusCode().is2xxSuccessful()) {
-            try {
-                ObjectMapper objectMapper = new ObjectMapper();
-                JsonNode jsonNode = objectMapper.readTree(Objects.requireNonNull(response.getBody()));
-                return jsonNode.get("access_token").asText();
-            } catch (Exception e) {
-                throw new RuntimeException("Error parsing OAuth token response", e);
-            }
-        } else {
-            throw new RuntimeException("OAuth Token Request Failed: " + response.getBody());
-        }
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        String query = "SELECT * FROM " + tableName + " LIMIT 10"; // Replace with actual table name
+        return jdbcTemplate.queryForList(query);
     }
 }
+
+
+
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/databricks")
+public class DatabricksController {
+
+    @Autowired
+    private DatabricksService databricksService;
+
+    @GetMapping("/data")
+    public List<Map<String, Object>> getDatabricksData(@RequestParam String table) {
+        return databricksService.getDatabricksData(table);
+    }
+}
+
