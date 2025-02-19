@@ -1,36 +1,61 @@
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.client.LaxRedirectStrategy;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+<dependency>
+    <groupId>com.squareup.okhttp3</groupId>
+    <artifactId>okhttp</artifactId>
+    <version>4.11.0</version>  <!-- Use the latest version -->
+</dependency>
 
+import okhttp3.*;
+import org.springframework.stereotype.Service;
+import java.io.IOException;
+import java.util.Objects;
+
+@Service
 public class DatabricksOAuthService {
 
-    public String getAccessToken() {
-        String tokenUrl = "https://login.microsoftonline.com/5d3e2773-e07f-4432-a630-1a0f68a28a05/oauth2/v2.0/token";
+    private final String clientId = "b2d94b7e-b35b-4567-8395-9ac2edad50de";
+    private final String clientSecret = "fn78Qo~lUJ9FNYFPBgLcvfto_oX336-lWelCPcdd";
+    private final String tenantId = "5d3e2773-e07f-4432-a630-1a0f68a28a05";
+    private final String tokenUrl = "https://login.microsoftonline.com/%s/oauth2/v2.0/token";
 
-        CloseableHttpClient httpClient = HttpClients.custom()
-                .setRedirectStrategy(new LaxRedirectStrategy()) // Enables following 302 redirects
+    private final OkHttpClient client = new OkHttpClient();
+
+    public String getAccessToken() {
+        String fullTokenUrl = String.format(tokenUrl, tenantId);
+
+        // Create the request body with form-encoded data
+        RequestBody body = new FormBody.Builder()
+                .add("client_id", clientId)
+                .add("client_secret", clientSecret)
+                .add("scope", "https://databricks.azure.com/.default")
+                .add("grant_type", "client_credentials")
                 .build();
 
-        RestTemplate restTemplate = new RestTemplate(new HttpComponentsClientHttpRequestFactory(httpClient));
+        // Create the HTTP request
+        Request request = new Request.Builder()
+                .url(fullTokenUrl)
+                .post(body)
+                .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                .build();
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful() && response.body() != null) {
+                String responseBody = Objects.requireNonNull(response.body()).string();
+                System.out.println("OAuth Response: " + responseBody);
 
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("client_id", clientId);
-        body.add("client_secret", clientSecret);
-        body.add("scope", "https://databricks.azure.com/.default");
-        body.add("grant_type", "client_credentials");
-
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(tokenUrl, request, Map.class);
-
-        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            return response.getBody().get("access_token").toString();
-        } else {
-            throw new RuntimeException("OAuth Token Request Failed: " + response.getBody());
+                // Extract the access token from the response JSON
+                return extractAccessToken(responseBody);
+            } else {
+                throw new RuntimeException("Failed to get OAuth token: " + response);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error while requesting OAuth token", e);
         }
+    }
+
+    private String extractAccessToken(String jsonResponse) {
+        // Basic way to extract access_token (use Jackson or Gson for better parsing)
+        int start = jsonResponse.indexOf("access_token\":\"") + 15;
+        int end = jsonResponse.indexOf("\"", start);
+        return jsonResponse.substring(start, end);
     }
 }
