@@ -1,53 +1,56 @@
-
-spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.jdbc.DataSourceBuilder;
 import javax.sql.DataSource;
-import java.util.List;
-import java.util.Map;
 
-@Service
-public class DatabricksService {
+@Configuration
+public class DatabricksConfig {
 
     @Autowired
-    private DatabricksOAuthService oAuthService;
+    private DatabricksOAuthService databricksOAuthService;
 
-    public List<Map<String, Object>> getDatabricksData(String tableName) {
-        String accessToken = oAuthService.getAccessToken();
+    @Value("${databricks.warehouse.id}")
+    private String warehouseId; // Use warehouse ID from Postman response
 
-        DataSource dataSource = new DriverManagerDataSource(
-                "jdbc:databricks://adb-7326973620544214.azuredatabricks.net:443/default;" +
-                "transportMode=http;ssl=1;AuthMech=3;UID=token;PWD=" + accessToken
-        );
+    @Value("${spring.datasource.driver-class-name}")
+    private String driverClassName;
 
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
-        String query = "SELECT * FROM " + tableName + " LIMIT 10"; // Replace with actual table name
-        return jdbcTemplate.queryForList(query);
+    @Value("${spring.datasource.host}")
+    private String databricksHost; // Make sure to define this in application.properties
+
+    @Bean(name = "databricksDataSource")
+    public DataSource dataSource() {
+        String accessToken = databricksOAuthService.getAccessToken();
+
+        // Validate Token
+        if (accessToken == null || accessToken.isEmpty()) {
+            throw new RuntimeException("🔴 ERROR: OAuth Token retrieval failed.");
+        }
+
+        // Debugging: Print Access Token (Shortened for Security)
+        System.out.println("🔹 OAuth Token: " + accessToken.substring(0, 30) + "...");
+
+        // Correct JDBC URL using your working Warehouse ID
+        String jdbcUrl = "jdbc:databricks://" + databricksHost + ":443/sql/protocolv1/o/7326973620544214/" + warehouseId +
+                ";AuthMech=3;UID=token;PWD=" + accessToken;
+
+        // Debugging: Print Connection URL (Masked Token)
+        System.out.println("🔹 JDBC Connection URL: " + jdbcUrl.replace(accessToken, "********"));
+
+        return DataSourceBuilder.create()
+                .url(jdbcUrl)
+                .driverClassName(driverClassName)
+                .build();
     }
 }
 
 
+spring.datasource.driver-class-name=com.databricks.client.jdbc.Driver
+spring.datasource.host=adb-7326973620544214.azuredatabricks.net
+databricks.warehouse.id=161273606e371f1  # Warehouse ID from Postman response
 
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-import java.util.List;
-import java.util.Map;
 
-@RestController
-@RequestMapping("/api/databricks")
-public class DatabricksController {
-
-    @Autowired
-    private DatabricksService databricksService;
-
-    @GetMapping("/data")
-    public List<Map<String, Object>> getDatabricksData(@RequestParam String table) {
-        return databricksService.getDatabricksData(table);
-    }
-}
 
