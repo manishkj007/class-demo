@@ -1,55 +1,139 @@
-import org.springframework.beans.factory.annotation.Autowired;
+Thanks for sharing all the context. Since you want to move your working Databricks JDBC code into a Spring Boot REST API project, here’s a complete guide and working example for integrating this properly into your Spring Boot application.
+
+Step 1: application.properties
+
+Add these in your application.properties:
+
+databricks.host=adb-xxxxx.azuredatabricks.net
+databricks.httpPath=/sql/protocolv1/o/xxxxxx/xxxxxx
+databricks.token=your-databricks-personal-access-token
+
+spring.datasource.driver-class-name=com.databricks.client.jdbc.Driver
+spring.datasource.url=jdbc:databricks://${databricks.host}:443/default;transportMode=http;ssl=1;httpPath=${databricks.httpPath};AuthMech=11;Auth_Flow=0;UseNativeQuery=0;Auth_AccessToken=${databricks.token}
+
+Step 2: Config Class
+
+Create DatabricksConfig.java to configure the DataSource and JdbcTemplate:
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SimpleDriverDataSource;
+
 import javax.sql.DataSource;
+import com.databricks.client.jdbc.Driver;
 
 @Configuration
 public class DatabricksConfig {
 
-    @Autowired
-    private DatabricksOAuthService databricksOAuthService;
+    @Value("${spring.datasource.url}")
+    private String jdbcUrl;
 
-    @Value("${spring.datasource.driver-class-name}")
-    private String driverClassName;
+    @Bean
+    public DataSource databricksDataSource() {
+        SimpleDriverDataSource dataSource = new SimpleDriverDataSource();
+        dataSource.setDriverClass(Driver.class);
+        dataSource.setUrl(jdbcUrl);
+        return dataSource;
+    }
 
-    @Value("${spring.datasource.host}")
-    private String databricksHost;
-
-    @Value("${databricks.warehouse.id}")
-    private String warehouseId;
-
-    @Value("${databricks.http-path}") // Make sure to define this in application.properties
-    private String httpPath;
-
-    @Bean(name = "databricksDataSource")
-    public DataSource dataSource() {
-        String accessToken = databricksOAuthService.getAccessToken();
-
-        if (accessToken == null || accessToken.isEmpty()) {
-            throw new RuntimeException("🔴 ERROR: OAuth Token retrieval failed.");
-        }
-
-        // Construct Correct JDBC URL with httpPath
-        String jdbcUrl = "jdbc:databricks://" + databricksHost + ":443" +
-                "/sql/protocolv1/o/7326973620544214/" + warehouseId +
-                ";httpPath=" + httpPath +
-                ";AuthMech=3;UID=token;PWD=" + accessToken;
-
-        // Debugging: Print Connection URL (Masked Token)
-        System.out.println("🔹 JDBC Connection URL: " + jdbcUrl.replace(accessToken, "********"));
-
-        return DataSourceBuilder.create()
-                .url(jdbcUrl)
-                .driverClassName(driverClassName)
-                .build();
+    @Bean
+    public JdbcTemplate jdbcTemplate(DataSource databricksDataSource) {
+        return new JdbcTemplate(databricksDataSource);
     }
 }
 
+Step 3: Create Service to Run Query
+
+Create DatabricksService.java:
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class DatabricksService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public DatabricksService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public List<Map<String, Object>> getHolidayCalendar() {
+        String query = "select * from hive_metastore.inv_semantic_qdb.holiday_calendar limit 100";
+        return jdbcTemplate.queryForList(query);
+    }
+}
+
+Step 4: Create Controller to Expose API
+
+Create DatabricksController.java:
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/databricks")
+public class DatabricksController {
+
+    private final DatabricksService databricksService;
+
+    public DatabricksController(DatabricksService databricksService) {
+        this.databricksService = databricksService;
+    }
+
+    @GetMapping("/holidays")
+    public List<Map<String, Object>> fetchHolidayCalendar() {
+        return databricksService.getHolidayCalendar();
+    }
+}
+
+Project Structure Example
+
+src/main/java/
+├── com.yourpackage
+│   ├── DatabricksConfig.java
+│   ├── DatabricksService.java
+│   ├── DatabricksController.java
+│   ├── Application.java
+
+Step 5: Example application.properties (Complete)
+
+server.port=8080
+
+databricks.host=adb-1234567890123456.7.azuredatabricks.net
+databricks.httpPath=/sql/1.0/warehouses/1234567890abcdef
+databricks.token=your-personal-access-token
 
 spring.datasource.driver-class-name=com.databricks.client.jdbc.Driver
-spring.datasource.host=adb-7326973620544214.azuredatabricks.net
-databricks.warehouse.id=161273606e371f1  # From Postman response
-databricks.http-path=/sql/1.0/endpoints/161273606e371f1  # Get this from Databricks UI
+spring.datasource.url=jdbc:databricks://${databricks.host}:443/default;transportMode=http;ssl=1;httpPath=${databricks.httpPath};AuthMech=11;Auth_Flow=0;UseNativeQuery=0;Auth_AccessToken=${databricks.token}
 
+Step 6: Run and Test
+
+Start your Spring Boot app, and test:
+
+GET http://localhost:8080/api/databricks/holidays
+
+This will return the 100 records from your table as JSON.
+
+Bonus Tip: Secure Secrets
+
+For production, never hard-code tokens in properties files. Use Azure Key Vault, environment variables, or a secrets manager instead.
+
+Summary
+
+Component	File
+Config	DatabricksConfig.java
+Service	DatabricksService.java
+Controller	DatabricksController.java
+Config File	application.properties
+
+Want me to generate a ready-to-run zip file for this? Let me know! I can bundle it for you and you can just copy it into your project.
