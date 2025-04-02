@@ -1,3 +1,60 @@
+azure.auth.url=https://login.microsoftonline.com/5d3e2773-e07f-4432-a630-1a0f68a28a05/oauth2/v2.0/token
+azure.client.id=3eb2f78e-96d7-48bd-813d-dcbf1a4d6908
+azure.client.secret=Q08OQ~c6iAVPm...
+azure.scope=2ff881a6-3304-4a8b-85cb-cd0e6f6879c1/.default
+
+
+package com.r2d2.qiss.util;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.*;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+
+import java.util.Map;
+
+@Service
+public class AzureTokenService {
+
+    @Value("${azure.auth.url}")
+    private String authUrl;
+
+    @Value("${azure.client.id}")
+    private String clientId;
+
+    @Value("${azure.client.secret}")
+    private String clientSecret;
+
+    @Value("${azure.scope}")
+    private String scope;
+
+    public String getAccessToken() {
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("client_id", clientId);
+        body.add("client_secret", clientSecret);
+        body.add("scope", scope);
+        body.add("grant_type", "client_credentials");
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+        ResponseEntity<Map> response = restTemplate.postForEntity(authUrl, request, Map.class);
+
+        return (String) response.getBody().get("access_token");
+    }
+}
+
+
+
+
+
+
+
 package com.r2d2.qiss.util;
 
 import org.springframework.beans.factory.annotation.Value;
