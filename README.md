@@ -1,3 +1,33 @@
+@Service
+public class IndexServiceImpl implements IndexService {
+
+    private final DatabricksJdbcTemplateFactory jdbcTemplateFactory;
+    private final AzureTokenService azureTokenService;
+
+    @Autowired
+    public IndexServiceImpl(DatabricksJdbcTemplateFactory jdbcTemplateFactory,
+                            AzureTokenService azureTokenService) {
+        this.jdbcTemplateFactory = jdbcTemplateFactory;
+        this.azureTokenService = azureTokenService;
+    }
+
+    @Override
+    public List<IndexEntity> findByEffectiveDate(Date calendarDate) {
+        String token = azureTokenService.getAccessToken();  // Dynamically fetch token
+        JdbcTemplate dynamicJdbcTemplate = jdbcTemplateFactory.createJdbcTemplate(token);
+
+        String query = "SELECT * FROM index_summary WHERE effective_date = ?";
+        return dynamicJdbcTemplate.query(query,
+                new Object[]{calendarDate.getTime()},
+                new BeanPropertyRowMapper<>(IndexEntity.class));
+    }
+}
+
+
+
+
+
+
 azure.auth.url=https://login.microsoftonline.com/5d3e2773-e07f-4432-a630-1a0f68a28a05/oauth2/v2.0/token
 azure.client.id=3eb2f78e-96d7-48bd-813d-dcbf1a4d6908
 azure.client.secret=Q08OQ~c6iAVPm...
