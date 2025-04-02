@@ -1,15 +1,47 @@
-Thanks for sharing all the context. Since you want to move your working Databricks JDBC code into a Spring Boot REST API project, here’s a complete guide and working example for integrating this properly into your Spring Boot application.
+package com.r2d2.qiss.util;
 
-Step 1: application.properties
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SimpleDriverDataSource;
+import com.databricks.client.jdbc.Driver;
+import org.springframework.stereotype.Component;
 
-Add these in your application.properties:
+@Component
+public class DatabricksJdbcTemplateFactory {
 
-databricks.host=adb-xxxxx.azuredatabricks.net
-databricks.httpPath=/sql/protocolv1/o/xxxxxx/xxxxxx
-databricks.token=your-databricks-personal-access-token
+    @Value("${databricks.base.url}")
+    private String baseUrl;
 
-spring.datasource.driver-class-name=com.databricks.client.jdbc.Driver
-spring.datasource.url=jdbc:databricks://${databricks.host}:443/default;transportMode=http;ssl=1;httpPath=${databricks.httpPath};AuthMech=11;Auth_Flow=0;UseNativeQuery=0;Auth_AccessToken=${databricks.token}
+    @Value("${databricks.http.path}")
+    private String httpPath;
+
+    @Value("${databricks.common.params}")
+    private String commonParams;
+
+    public JdbcTemplate createJdbcTemplate(String token) {
+        String jdbcUrlWithToken = String.format(
+            "%shttpPath=%s;%s;Auth_AccessToken=%s",
+            baseUrl, httpPath, commonParams, token
+        );
+
+        SimpleDriverDataSource dataSource = new SimpleDriverDataSource();
+        dataSource.setDriverClass(Driver.class);
+        dataSource.setUrl(jdbcUrlWithToken);
+
+        return new JdbcTemplate(dataSource);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
 
 Step 2: Config Class
 
